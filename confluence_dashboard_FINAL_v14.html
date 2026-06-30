@@ -1,0 +1,1175 @@
+<!--
+  TCAS / AMS — DAILY OPS DASHBOARD v14
+  v14 adds:
+  1. Confluence REST API sync (AJS.$) — all 30 team members see live data
+  2. "Copy for Confluence" archive report (formatted, not raw HTML)
+  Paste into Confluence HTML macro.
+-->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.dash-root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f8f6;padding:12px 20px;color:#1a1a18;width:100%}
+.dash{max-width:1400px;margin:0 auto}
+.top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.title-block p:first-child{font-size:20px;font-weight:600;color:#1a1a18}
+.title-block p:last-child{font-size:13px;color:#73726c;margin-top:2px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+.dbtn{font-size:13px;padding:7px 14px;border-radius:8px;cursor:pointer;border:0.5px solid #d3d1c7;background:#fff;color:#1a1a18;font-family:inherit;display:inline-flex;align-items:center;gap:5px;line-height:1.4}
+.dbtn:hover{background:#f1efea}
+.dbtn.primary{background:#1d4ed8;color:#fff;border-color:transparent}
+.dbtn.primary:hover{background:#1e40af}
+.dbtn.secondary{background:#f1efea;color:#5f5e5a;border-color:#d3d1c7}
+.dbtn.dl{background:#166534;color:#fff;border-color:transparent}
+.dbtn.dl:hover{background:#14532d}
+.dbtn.cp{background:#5b21b6;color:#fff;border-color:transparent}
+.dbtn.cp:hover{background:#4c1d95}
+.dtoast{display:none;background:#dcfce7;color:#166534;border-radius:8px;padding:10px 16px;font-size:13px;text-align:center;margin-bottom:12px;font-weight:500}
+.dsync-bar{display:none;background:#eff6ff;color:#1d4ed8;border-radius:8px;padding:8px 16px;font-size:12px;text-align:center;margin-bottom:8px}
+.dsec-wrap{margin-bottom:12px;border-radius:12px;overflow:hidden;border:0.5px solid #e0dfd6}
+.dsec-hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;cursor:pointer;user-select:none;background:#fff}
+.dsec-hdr:hover{background:#f8f8f6}
+.dsec-hdr.blue-l{border-left:4px solid #1d4ed8}
+.dsec-hdr.red-l{border-left:4px solid #e24b4a}
+.dsec-hdr.purple-l{border-left:4px solid #7c3aed}
+.dsec-hdr.orange-l{border-left:4px solid #ea580c}
+.dsec-hdr.green-l{border-left:4px solid #16a34a}
+.dsec-hdr-left{display:flex;align-items:center;gap:10px}
+.dsec-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.dsec-icon.blue{background:#dbeafe;color:#1d4ed8}
+.dsec-icon.red{background:#fee2e2;color:#991b1b}
+.dsec-icon.purple{background:#ede9fe;color:#5b21b6}
+.dsec-icon.orange{background:#fff7ed;color:#ea580c}
+.dsec-icon.green{background:#dcfce7;color:#16a34a}
+.dsec-icon.indigo{background:#eff6ff;color:#1d4ed8}
+.dsec-name{font-size:15px;font-weight:600;color:#1a1a18}
+.dsec-meta{font-size:12px;color:#73726c;margin-top:1px}
+.dsec-arrow{font-size:18px;color:#73726c;transition:transform 0.2s}
+.dsec-body{background:#f8f8f6;padding:16px 18px;border-top:0.5px solid #e0dfd6}
+.dcounts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px}
+.dcount-card{background:#fff;border-radius:10px;border:0.5px solid #e0dfd6;overflow:hidden}
+.dcount-card-hdr{padding:10px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:0.5px solid #e0dfd6}
+.dcount-card-hdr.blue{background:#eff6ff;color:#1d4ed8}
+.dcount-card-hdr.red{background:#fef2f2;color:#991b1b}
+.dcount-card-hdr.amber{background:#fffbeb;color:#92400e}
+.dcount-card-body{padding:12px 14px}
+.dcount-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid #f1efea;font-size:13px}
+.dcount-row:last-child{border-bottom:none}
+.dcount-label{color:#5f5e5a}
+.dcount-val{font-size:16px;font-weight:700;min-width:28px;text-align:right}
+.dcount-val.danger{color:#991b1b}
+.dcount-val.warning{color:#92400e}
+.dcount-val.ok{color:#166534}
+.dcount-val.neutral{color:#1a1a18}
+.dpriority-row{display:flex;flex-wrap:wrap;gap:6px;padding:10px 0 4px}
+.dp-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:0.5px solid #e0dfd6;background:#fff}
+.dp-pill-label{font-size:11px;font-weight:600;color:#73726c}
+.dp-pill-val{font-size:15px;font-weight:700}
+.dp-pill-val.p1{color:#991b1b}
+.dp-pill-val.p2{color:#c2410c}
+.dp-pill-val.p3{color:#92400e}
+.dp-pill-val.p4{color:#3d6b10}
+.dtrack-breakdown{margin-top:8px}
+.dtrack-row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;margin-bottom:4px;background:#fff;border:0.5px solid #e0dfd6}
+.dtrack-name{font-size:12px;font-weight:600;color:#1a1a18;min-width:70px}
+.dtrack-sub{display:flex;gap:8px;flex-wrap:wrap}
+.dtrack-sub-item{font-size:11px;color:#5f5e5a}
+.dtrack-sub-item span{font-weight:600;color:#1a1a18}
+.dcard{background:#fff;border:0.5px solid #e0dfd6;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:8px}
+.dcard.major{border-left:3px solid #e24b4a}
+.dcard.burning{border-left:3px solid #ba7517}
+.dcard.monitoring{border-left:3px solid #888780}
+.dcard.resolved{border-left:3px solid #16a34a}
+.dcard.pending{border-left:3px solid #7c3aed}
+.dcard.age-critical{background:#fff8f8;border-color:#fca5a5;box-shadow:0 0 0 2px rgba(239,68,68,0.15)}
+.dcard.age-warning{background:#fffbf0;border-color:#fcd34d;box-shadow:0 0 0 2px rgba(251,191,36,0.15)}
+.dcr-card{background:#fff;border:0.5px solid #e0dfd6;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:8px}
+.dcr-card.open{border-left:3px solid #ea580c}
+.dcr-card.in-progress{border-left:3px solid #d97706}
+.dcr-card.completed{border-left:3px solid #16a34a}
+.dcr-card.cancelled{border-left:3px solid #888780}
+.dcard-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.dcard-title{font-size:14px;font-weight:600;color:#1a1a18;margin-bottom:4px}
+.dcard-status{font-size:13px;color:#5f5e5a;line-height:1.6;margin-bottom:8px}
+.dchips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.dchip{font-size:11px;padding:2px 8px;border-radius:6px;background:#f1efea;color:#5f5e5a;border:0.5px solid #d3d1c7}
+.dchip.blue{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.dchip.purple{background:#ede9fe;color:#5b21b6;border-color:#c4b5fd}
+.dbadge{font-size:11px;padding:2px 8px;border-radius:20px;display:inline-block}
+.dbadge.red{background:#fee2e2;color:#991b1b}
+.dbadge.amber{background:#fef3c7;color:#92400e}
+.dbadge.gray{background:#f1efea;color:#5f5e5a;border:0.5px solid #d3d1c7}
+.dbadge.green{background:#dcfce7;color:#166534}
+.dbadge.purple{background:#ede9fe;color:#5b21b6}
+.dbadge.orange{background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa}
+.dage-badge-critical{font-size:11px;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.dage-badge-warning{font-size:11px;padding:2px 8px;border-radius:20px;background:#fef3c7;color:#92400e;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.dth-btn{font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;border:0.5px solid #d3d1c7;background:#f8f8f6;color:#73726c;font-family:inherit}
+.dth-btn:hover{background:#f1efea}
+.dth-wrap{display:none;margin-top:10px;border-top:0.5px solid #e0dfd6;padding-top:10px}
+.dtl-empty{font-size:12px;color:#888780;font-style:italic;padding:6px 0}
+.dtl-row{display:flex;margin-bottom:0}
+.dtl-left{display:flex;flex-direction:column;align-items:center;margin-right:12px}
+.dtl-dot{width:10px;height:10px;border-radius:50%;background:#d3d1c7;flex-shrink:0;margin-top:4px}
+.dtl-dot.major{background:#e24b4a}.dtl-dot.burning{background:#ba7517}.dtl-dot.monitoring{background:#888780}.dtl-dot.resolved{background:#16a34a}.dtl-dot.pending{background:#7c3aed}
+.dtl-line{width:1px;background:#e0dfd6;flex:1;min-height:8px}
+.dtl-row:last-child .dtl-line{display:none}
+.dtl-body{padding-bottom:12px;flex:1}
+.dtl-date{font-size:11px;font-weight:600;color:#73726c;margin-bottom:2px;font-family:monospace}
+.dtl-status{font-size:12px;color:#1a1a18;line-height:1.5;margin-bottom:2px}
+.dtl-meta{font-size:11px;color:#888780}
+.dno-cards{text-align:center;padding:24px;color:#888780;font-size:13px;font-style:italic;background:#fff;border-radius:10px;border:0.5px dashed #d3d1c7}
+.dtrack-group{margin-bottom:16px}
+.dtrack-group-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #e0dfd6}
+.dhist-panel{display:none;background:#fff;border:0.5px solid #e0dfd6;border-radius:12px;padding:20px;margin-bottom:16px}
+.ddate-group{margin-bottom:8px}
+.ddate-hdr{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f1efea;border:0.5px solid #d3d1c7;border-radius:8px;cursor:pointer}
+.ddate-hdr:hover{background:#e8e7e2}
+.ddate-hdr .ddh-date{font-size:14px;font-weight:600;color:#1a1a18}
+.ddate-hdr .ddh-meta{font-size:12px;color:#73726c;margin-top:1px}
+.dtime-entry{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:#f8faff;border:0.5px solid #e0dfd6;border-left:2px solid #bfdbfe;border-radius:0 8px 8px 0;cursor:pointer;margin-bottom:4px}
+.dtime-entry:hover{background:#eff6ff}
+.dte-time{font-size:13px;font-weight:600;color:#1d4ed8;font-family:monospace}
+.dte-meta{font-size:12px;color:#73726c;margin-top:1px}
+.dd-chip{font-size:11px;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#991b1b}
+.dd-chip.amber{background:#fef3c7;color:#92400e}
+.dd-chip.purple{background:#ede9fe;color:#5b21b6}
+.dno-hist{text-align:center;padding:28px;color:#73726c;font-size:14px}
+.dsnap-wrap{display:none;border-top:0.5px solid #e0dfd6;padding-top:16px;margin-top:16px}
+.dsnap-banner{background:#fef3c7;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.dexport-bar{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.dform-wrap{display:none;background:#fff;border:0.5px solid #e0dfd6;border-radius:12px;padding:20px;margin-bottom:16px}
+.dform-sec{background:#f8f8f6;border-radius:10px;padding:14px;margin-bottom:12px}
+.dform-sec h3{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:10px}
+.dform-sec.ritm-sec{border:0.5px solid #c4b5fd}
+.dform-sec.ritm-sec h3{color:#5b21b6}
+.dfr{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.dfr.full{grid-template-columns:1fr}
+.dfr.four{grid-template-columns:1fr 1fr 1fr 1fr}
+.dash-root label{font-size:12px;color:#73726c;display:block;margin-bottom:3px;font-weight:normal}
+.dash-root input[type=text],.dash-root input[type=number],.dash-root select,.dash-root textarea{width:100%;font-size:13px;font-family:inherit;padding:7px 10px;border-radius:8px;border:0.5px solid #d3d1c7;background:#fff;color:#1a1a18;line-height:1.4}
+.dash-root textarea{resize:vertical;min-height:60px}
+.dfb{background:#fff;border:0.5px solid #d3d1c7;border-radius:8px;padding:12px;margin-bottom:8px;position:relative}
+.dfb.ritm{background:#faf9ff;border-color:#c4b5fd}
+.drm-btn{position:absolute;top:8px;right:8px;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer;border:0.5px solid #d3d1c7;background:#f1efea;color:#5f5e5a;font-family:inherit}
+.dadd-btn{font-size:12px;padding:6px 14px;border-radius:8px;cursor:pointer;border:0.5px dashed #d3d1c7;background:transparent;color:#73726c;width:100%;margin-top:4px;font-family:inherit;display:block}
+.dadd-btn:hover{background:#f1efea}
+.dadd-btn.ritm{border-color:#c4b5fd;color:#5b21b6}
+.dadd-btn.ritm:hover{background:#ede9fe}
+.dadd-btn.cr{border-color:#fed7aa;color:#ea580c}
+.dadd-btn.cr:hover{background:#fff7ed}
+.dform-footer{display:flex;gap:10px;margin-top:4px}
+.dform-footer .dbtn{flex:1;justify-content:center}
+.dact-table{width:100%;border-collapse:collapse;font-size:13px}
+.dact-table th{text-align:left;font-size:11px;color:#888780;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;border-bottom:1px solid #e0dfd6;background:#f8f8f6}
+.dact-table td{padding:8px 10px;border-bottom:.5px solid #e0dfd6;color:#1a1a18;vertical-align:top}
+.dact-table tr:last-child td{border-bottom:none}
+@media(max-width:700px){
+  .dcounts-grid{grid-template-columns:1fr}
+  .dfr.four{grid-template-columns:1fr 1fr}
+  .dfr{grid-template-columns:1fr}
+}
+</style>
+
+<div class="dash-root">
+<div class="dash">
+  <div class="top-bar">
+    <div class="title-block">
+      <p>Daily ops standup</p>
+      <p id="d-sub">Loading...</p>
+    </div>
+    <div class="btn-row">
+      <button class="dbtn secondary" id="hist-btn" onclick="dOpenHist()">&#128337; Past updates</button>
+      <button class="dbtn primary"   id="upd-btn"  onclick="dOpenForm()">&#9998; Update today's data</button>
+    </div>
+  </div>
+  <div class="dtoast"   id="d-toast"></div>
+  <div class="dsync-bar" id="d-sync-bar">&#8635; Syncing with Confluence...</div>
+
+  <!-- HISTORY PANEL -->
+  <div class="dhist-panel" id="d-hist-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="font-size:16px;font-weight:600;color:#1a1a18">&#128337; Past standup updates</h2>
+      <button class="dbtn" onclick="dCloseHist()">&#10005; Close</button>
+    </div>
+    <div id="d-date-list"></div>
+    <div class="dsnap-wrap" id="d-snap-wrap">
+      <div class="dsnap-banner">
+        <span id="d-snap-label"></span>
+        <button class="dbtn" style="font-size:12px;padding:4px 10px" onclick="dCloseSnap()">&#8593; Back</button>
+      </div>
+      <div class="dexport-bar" id="d-export-bar" style="display:none">
+        <button class="dbtn dl" onclick="dDoDownload()">&#11015; Download as HTML</button>
+        <button class="dbtn cp" id="d-copy-btn" onclick="dDoCopy(this)">&#128203; Copy for Confluence</button>
+      </div>
+      <div id="d-snap-content" style="margin-top:16px"></div>
+    </div>
+  </div>
+
+  <!-- UPDATE FORM -->
+  <div class="dform-wrap" id="d-form-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:16px;font-weight:600;color:#1a1a18">&#9998; Update today's standup data</h2>
+      <button class="dbtn" onclick="dCloseForm()">&#10005; Cancel</button>
+    </div>
+    <div class="dform-sec">
+      <h3>Meeting info</h3>
+      <div class="dfr">
+        <div><label>Date</label><input type="text" id="df-date" placeholder="28 May 2026"></div>
+        <div><label>Your name</label><input type="text" id="df-name" placeholder="Pankaj"></div>
+      </div>
+    </div>
+    <div class="dform-sec">
+      <h3>Last 24 hrs counts</h3>
+      <div class="dfr four">
+        <div><label>DHD Incidents</label><input type="number" id="df-dhd" min="0"></div>
+        <div><label>Cubastion Incidents</label><input type="number" id="df-cub" min="0"></div>
+        <div><label>Customer Emails</label><input type="number" id="df-email" min="0"></div>
+        <div><label>Alerts</label><input type="number" id="df-d24" min="0"></div>
+      </div>
+    </div>
+    <div class="dform-sec">
+      <h3>Blocked tickets &gt; 3 days</h3>
+      <div class="dfr">
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Siebel</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="db3-sc" min="0"></div><div><label>With User</label><input type="number" id="db3-su" min="0"></div></div></div>
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Middleware</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="db3-mc" min="0"></div><div><label>With User</label><input type="number" id="db3-mu" min="0"></div></div></div>
+      </div>
+      <div class="dfr">
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">BI</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="db3-bc" min="0"></div><div><label>With User</label><input type="number" id="db3-bu" min="0"></div></div></div>
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Infra</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="db3-ic" min="0"></div><div><label>With User</label><input type="number" id="db3-iu" min="0"></div></div></div>
+      </div>
+      <p style="font-size:12px;font-weight:600;color:#1a1a18;margin:10px 0 6px">Priority counts</p>
+      <div class="dfr four">
+        <div><label>P1</label><input type="number" id="df-p1" min="0"></div>
+        <div><label>P2</label><input type="number" id="df-p2" min="0"></div>
+        <div><label>P3</label><input type="number" id="df-p3" min="0"></div>
+        <div><label>P4</label><input type="number" id="df-p4" min="0"></div>
+      </div>
+    </div>
+    <div class="dform-sec">
+      <h3>SR blocked &gt; 5 days</h3>
+      <div class="dfr">
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Siebel</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="dsr-sc" min="0"></div><div><label>With User</label><input type="number" id="dsr-su" min="0"></div></div></div>
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Middleware</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="dsr-mc" min="0"></div><div><label>With User</label><input type="number" id="dsr-mu" min="0"></div></div></div>
+      </div>
+      <div class="dfr">
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">BI</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="dsr-bc" min="0"></div><div><label>With User</label><input type="number" id="dsr-bu" min="0"></div></div></div>
+        <div><p style="font-size:12px;font-weight:600;color:#1a1a18;margin-bottom:6px">Infra</p>
+          <div class="dfr"><div><label>With Cubastion</label><input type="number" id="dsr-ic" min="0"></div><div><label>With User</label><input type="number" id="dsr-iu" min="0"></div></div></div>
+      </div>
+    </div>
+    <div class="dform-sec">
+      <h3>Incidents</h3>
+      <div id="d-inc-fields"></div>
+      <button class="dadd-btn" onclick="dAddIncF(null)">+ Add incident</button>
+    </div>
+    <div class="dform-sec ritm-sec">
+      <h3>&#9679; RITM</h3>
+      <div id="d-ritm-fields"></div>
+      <button class="dadd-btn ritm" onclick="dAddRitmF(null)">+ Add RITM</button>
+    </div>
+    <div class="dform-sec" style="border:0.5px solid #fed7aa">
+      <h3 style="color:#ea580c">&#9881; Change Requests</h3>
+      <div id="d-cr-fields"></div>
+      <button class="dadd-btn cr" onclick="dAddCRF(null)">+ Add Change Request</button>
+    </div>
+    <div class="dform-sec">
+      <h3>&#128100; POC Details</h3>
+      <div id="d-poc-fields"></div>
+      <button class="dadd-btn" onclick="dAddPocF(null)">+ Add POC</button>
+    </div>
+    <div class="dform-footer">
+      <button class="dbtn primary" id="d-save-btn" onclick="dSaveForm()">&#10003; Save and update dashboard</button>
+      <button class="dbtn" onclick="dCloseForm()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- SECTION 1 — TICKET SUMMARY -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr blue-l" id="dhdr-counts">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon blue">&#128202;</div>
+        <div><div class="dsec-name">Ticket Summary</div><div class="dsec-meta" id="d-counts-meta">Last 24hrs &middot; Blocked &gt;3 days &middot; SR &gt;5 days</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-counts">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-counts">
+      <div class="dcounts-grid">
+        <div class="dcount-card">
+          <div class="dcount-card-hdr blue">&#128336; Last 24 hours</div>
+          <div class="dcount-card-body">
+            <div class="dcount-row"><span class="dcount-label">DHD Incidents</span><span class="dcount-val ok" id="dc-dhd">0</span></div>
+            <div class="dcount-row"><span class="dcount-label">Cubastion Incidents</span><span class="dcount-val warning" id="dc-cub">0</span></div>
+            <div class="dcount-row"><span class="dcount-label">Customer Emails</span><span class="dcount-val neutral" id="dc-email">0</span></div>
+            <div class="dcount-row"><span class="dcount-label">Alerts</span><span class="dcount-val neutral" id="dc-d24">0</span></div>
+            <div class="dcount-row" style="border-top:1px solid #e0dfd6;margin-top:4px;padding-top:8px"><span class="dcount-label" style="font-weight:600;color:#1a1a18">Total</span><span class="dcount-val neutral" id="dc-total24">0</span></div>
+          </div>
+        </div>
+        <div class="dcount-card">
+          <div class="dcount-card-hdr red">&#128274; Blocked &gt; 3 days</div>
+          <div class="dcount-card-body">
+            <div class="dcount-row" style="margin-bottom:6px"><span class="dcount-label" style="font-weight:600;color:#1a1a18">Total</span><span class="dcount-val danger" id="db3-total">0</span></div>
+            <div class="dpriority-row" id="d-priority-row"></div>
+            <div class="dtrack-breakdown" id="db3-breakdown"></div>
+          </div>
+        </div>
+        <div class="dcount-card">
+          <div class="dcount-card-hdr amber">&#128203; SR &gt; 5 days</div>
+          <div class="dcount-card-body">
+            <div class="dcount-row"><span class="dcount-label" style="font-weight:600;color:#1a1a18">Total</span><span class="dcount-val warning" id="dsr-total">0</span></div>
+            <div class="dtrack-breakdown" id="dsr-breakdown"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2 — INCIDENTS -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr red-l" id="dhdr-inc">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon red">&#128204;</div>
+        <div><div class="dsec-name">Incidents</div><div class="dsec-meta" id="d-inc-meta">--</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-inc">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-inc"><div id="d-inc-cards"></div></div>
+  </div>
+
+  <!-- SECTION 3 — RITM -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr purple-l" id="dhdr-ritm">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon purple">&#9679;</div>
+        <div><div class="dsec-name">RITM</div><div class="dsec-meta" id="d-ritm-meta">--</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-ritm">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-ritm"><div id="d-ritm-cards"></div></div>
+  </div>
+
+  <!-- SECTION 4 — CHANGE REQUESTS -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr orange-l" id="dhdr-cr">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon orange">&#9881;</div>
+        <div><div class="dsec-name">Change Requests</div><div class="dsec-meta" id="d-cr-meta">--</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-cr">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-cr"><div id="d-cr-cards"></div></div>
+  </div>
+
+  <!-- SECTION 5 — RESOLVED -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr green-l" id="dhdr-resolved">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon green">&#10003;</div>
+        <div><div class="dsec-name">Resolved Tickets</div><div class="dsec-meta" id="d-resolved-meta">Running closure log</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-resolved">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-resolved">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <p style="font-size:12px;color:#73726c">Tickets marked <strong>Resolved</strong> accumulate here automatically.</p>
+        <button class="dbtn dl" onclick="dDownloadResolvedMD()">&#11015; Download as Markdown</button>
+      </div>
+      <div id="d-resolved-list"></div>
+    </div>
+  </div>
+
+  <!-- SECTION 6 — POC -->
+  <div class="dsec-wrap">
+    <div class="dsec-hdr blue-l" id="dhdr-act">
+      <div class="dsec-hdr-left">
+        <div class="dsec-icon indigo">&#128100;</div>
+        <div><div class="dsec-name">POC Details</div><div class="dsec-meta" id="d-act-meta">Concerned points of contact</div></div>
+      </div>
+      <span class="dsec-arrow" id="darr-act">&#9650;</span>
+    </div>
+    <div class="dsec-body" id="dsec-act">
+      <table class="dact-table" style="background:#fff;border-radius:10px;overflow:hidden;border:.5px solid #e0dfd6">
+        <thead><tr><th>Role</th><th>Name</th><th>Present</th></tr></thead>
+        <tbody id="d-v-act"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p style="font-size:12px;color:#888780;text-align:center;margin-top:12px" id="d-v-foot"></p>
+</div>
+</div>
+
+<script>
+(function(){
+
+/* -- KEYS & GLOBALS -- */
+var HK='d_ops_v14_hist', DK='d_ops_v14_cur', RK='d_ops_v14_res';
+var iC=0, rC=0, crC=0, pocC=0;
+var dCurrentSnap=null;
+var SNOW='https://daimlertruck.service-now.com';
+
+/* -- CONFLUENCE API CONFIG -- */
+var CONF_BASE='https://con.t3.daimlertruck.com';
+var CONF_SPACE='TCAS';
+var CONF_DATA_TITLE='Dash-Data-v14';
+var CONF_HIST_TITLE='Dash-Hist-v14';
+var CONF_RESOLVED_TITLE='Dash-Resolved-v14';
+var CONF_PAGE_ID=null;
+var CONF_HIST_PAGE_ID=null;
+var CONF_RESOLVED_PAGE_ID=null;
+
+/* -- HTTP (AJS.$ with fetch fallback, uses active session) -- */
+function httpReq(url,method,data){
+  return new Promise(function(resolve,reject){
+    if(typeof AJS!=='undefined'&&AJS&&AJS.$){
+      var opts={url:url,type:method,contentType:'application/json',
+        success:function(r){resolve(r);},
+        error:function(xhr,st,err){fetchFallback(url,method,data).then(resolve).catch(reject);}
+      };
+      if(data)opts.data=JSON.stringify(data);
+      AJS.$.ajax(opts);
+    } else {
+      fetchFallback(url,method,data).then(resolve).catch(reject);
+    }
+  });
+}
+function fetchFallback(url,method,data){
+  var opts={method:method,credentials:'include',headers:{'Content-Type':'application/json','X-Atlassian-Token':'no-check'}};
+  if(data)opts.body=JSON.stringify(data);
+  return fetch(url,opts).then(function(r){
+    if(!r.ok)return r.text().then(function(t){throw new Error(r.status+': '+t);});
+    return r.json();
+  });
+}
+function cGet(url){return httpReq(url,'GET',null);}
+function cPost(url,d){return httpReq(url,'POST',d);}
+function cPut(url,d){return httpReq(url,'PUT',d);}
+
+/* -- CONFLUENCE PAGE HELPERS -- */
+function confIdVar(pv){return pv==='hist'?'CONF_HIST_PAGE_ID':pv==='res'?'CONF_RESOLVED_PAGE_ID':'CONF_PAGE_ID';}
+function setPageId(pv,id){if(pv==='hist')CONF_HIST_PAGE_ID=id;else if(pv==='res')CONF_RESOLVED_PAGE_ID=id;else CONF_PAGE_ID=id;}
+function getPageId(pv){return pv==='hist'?CONF_HIST_PAGE_ID:pv==='res'?CONF_RESOLVED_PAGE_ID:CONF_PAGE_ID;}
+
+async function confFindPage(title,pv){
+  try{
+    var url=CONF_BASE+'/rest/api/content?title='+encodeURIComponent(title)+'&spaceKey='+CONF_SPACE+'&expand=version,body.storage';
+    var j=await cGet(url);
+    if(j.results&&j.results.length>0){setPageId(pv,j.results[0].id);return j.results[0];}
+    return null;
+  }catch(e){return null;}
+}
+async function confCreatePage(title,pv){
+  try{
+    var enc=btoa(unescape(encodeURIComponent('null')));
+    var body={type:'page',title:title,space:{key:CONF_SPACE},
+      body:{storage:{value:'<p>DDATA:'+enc+':END</p>',representation:'storage'}}};
+    var j=await cPost(CONF_BASE+'/rest/api/content',body);
+    setPageId(pv,j.id);return j;
+  }catch(e){return null;}
+}
+async function confWrite(title,pv,data){
+  try{
+    var page=await confFindPage(title,pv);
+    if(!page)page=await confCreatePage(title,pv);
+    if(!page)return false;
+    var pid=getPageId(pv);
+    var vj=await cGet(CONF_BASE+'/rest/api/content/'+pid+'?expand=version');
+    var ver=(vj.version&&vj.version.number?vj.version.number:1)+1;
+    var enc=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+    var nb={version:{number:ver},title:title,type:'page',
+      body:{storage:{value:'<p>DDATA:'+enc+':END</p>',representation:'storage'}}};
+    await cPut(CONF_BASE+'/rest/api/content/'+pid,nb);
+    return true;
+  }catch(e){console.error('confWrite error',e);return false;}
+}
+async function confRead(title,pv){
+  try{
+    var page=await confFindPage(title,pv);
+    if(!page)return null;
+    var raw=page.body&&page.body.storage&&page.body.storage.value||'';
+    var m=raw.match(/DDATA:([A-Za-z0-9+\/=]+):END/);
+    if(!m||!m[1])return null;
+    var dec=decodeURIComponent(escape(atob(m[1])));
+    if(dec==='null')return null;
+    return JSON.parse(dec);
+  }catch(e){return null;}
+}
+
+/* -- LS FALLBACK -- */
+function lsG(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+/* -- DATA -- */
+var EMPTY={date:'',name:'',dhd:0,cub:0,email:0,d24:0,p1:0,p2:0,p3:0,p4:0,
+  b3:{siebel:{c:0,u:0},mw:{c:0,u:0},bi:{c:0,u:0},infra:{c:0,u:0}},
+  sr:{siebel:{c:0,u:0},mw:{c:0,u:0},bi:{c:0,u:0},infra:{c:0,u:0}},
+  incidents:[],ritms:[],crs:[],
+  pocs:[
+    {role:'DTAG DevOps',name:'Ahmet/Arun',present:'Yes'},
+    {role:'DTAG Business',name:'Tatjana/Diana',present:'Yes'},
+    {role:'TCAS BPs',name:'',present:'NA'},
+    {role:'DHD Team',name:'Luliia/Liga',present:'Yes'},
+    {role:'AMS Lead',name:'Pankaj',present:'Yes'},
+    {role:'AMS Siebel Track Lead',name:'Kapil',present:'Yes'},
+    {role:'AMS MW Track Lead',name:'Ankush',present:'Yes'},
+    {role:'AMS BI Track Lead',name:'Joginder',present:'Yes'},
+    {role:'AMS Infra Lead',name:'Joginder',present:'Yes'},
+    {role:'AMS DBA Lead',name:'Saransh',present:'Yes'},
+    {role:'AMS Admin',name:'Varun',present:'Yes'}
+  ],
+  actions:[]
+};
+
+var D=lsG(DK)||JSON.parse(JSON.stringify(EMPTY));
+if(!D.pocs)D.pocs=EMPTY.pocs;
+if(!D.crs)D.crs=[];
+if(!D.ritms)D.ritms=[];
+if(!D.incidents)D.incidents=[];
+
+function dLoadHist(){
+  var h=lsG(HK)||[];
+  // Deduplicate: keep only one entry per date+savedAt combo
+  var seen={};
+  return h.filter(function(x){var k=(x.date||'')+'|'+(x.savedAt||'');if(seen[k])return false;seen[k]=true;return true;});
+}
+function dSaveHist(h){lsS(HK,h);}
+function dLoadResolved(){return lsG(RK)||[];}
+function dSaveResolved(r){lsS(RK,r);}
+
+function dAddSnapshot(data){
+  var h=dLoadHist();
+  var now=new Date();
+  var hh=now.getHours(),mm=String(now.getMinutes()).padStart(2,'0');
+  var ampm=hh>=12?'PM':'AM';hh=hh%12||12;
+  var timeStr=hh+':'+mm+' '+ampm;
+  var snap=JSON.parse(JSON.stringify(data));
+  snap.savedAt=timeStr;
+  snap.snapId=Date.now();
+  // Remove ALL existing entries for same date — only keep the latest save per date
+  h=h.filter(function(x){return x.date!==data.date;});
+  h.unshift(snap);
+  if(h.length>60)h=h.slice(0,60);
+  dSaveHist(h);
+}
+
+/* -- HELPERS -- */
+function dSnowLink(id){
+  var isR=id.indexOf('RITM')===0;
+  var tbl=isR?'sc_req_item.do':'incident.do';
+  var url=SNOW+'/nav_to.do?uri='+tbl+'?sysparm_query=number='+id;
+  var col=isR?'#7c3aed':'#1d4ed8';
+  return '<a href="'+url+'" target="_blank" rel="noopener" style="color:'+col+';font-family:monospace;font-size:12px;font-weight:600;text-decoration:none;border-bottom:1px dashed '+col+'">'+id+' &#8599;</a>';
+}
+function dSevBadge(s){
+  var m={major:'<span class="dbadge red">Major</span>',burning:'<span class="dbadge amber">Burning</span>',monitoring:'<span class="dbadge gray">Monitoring</span>',resolved:'<span class="dbadge green">Resolved</span>',pending:'<span class="dbadge purple">Pending</span>'};
+  return m[s]||'';
+}
+function dCrBadge(s){
+  var m={'open':'<span class="dbadge orange">Open</span>','in-progress':'<span class="dbadge amber">In Progress</span>','completed':'<span class="dbadge green">Completed</span>','cancelled':'<span class="dbadge gray">Cancelled</span>'};
+  return m[s]||'<span class="dbadge gray">'+s+'</span>';
+}
+function dAgeFromCreatedOn(createdOn,refDate){
+  try{
+    var mn={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    var cp=createdOn.split(' ');var cd=new Date(parseInt(cp[2]),mn[cp[1]],parseInt(cp[0]));
+    var rp=(refDate||D.date||'').split(' ');var rd=new Date(parseInt(rp[2]),mn[rp[1]],parseInt(rp[0]));
+    var age=Math.round((rd-cd)/(864e5));return age<0?0:age;
+  }catch(e){return 0;}
+}
+function dShowToast(msg){
+  var el=document.getElementById('d-toast');
+  if(!el)return;
+  el.textContent=msg;el.style.display='block';
+  setTimeout(function(){el.style.display='none';},3000);
+}
+function dShowSync(show){
+  var el=document.getElementById('d-sync-bar');
+  if(el)el.style.display=show?'block':'none';
+}
+
+/* -- SECTION TOGGLE -- */
+function dToggleSec(bodyId,arrowId){
+  var el=document.getElementById(bodyId);
+  var ar=document.getElementById(arrowId);
+  if(!el)return;
+  var isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  if(ar)ar.innerHTML=isOpen?'&#9660;':'&#9650;';
+}
+function dAttachSecs(){
+  var pairs=[
+    ['dhdr-counts','dsec-counts','darr-counts'],
+    ['dhdr-inc','dsec-inc','darr-inc'],
+    ['dhdr-ritm','dsec-ritm','darr-ritm'],
+    ['dhdr-cr','dsec-cr','darr-cr'],
+    ['dhdr-resolved','dsec-resolved','darr-resolved'],
+    ['dhdr-act','dsec-act','darr-act']
+  ];
+  pairs.forEach(function(p){
+    var hdr=document.getElementById(p[0]);
+    if(!hdr)return;
+    hdr.onclick=function(){dToggleSec(p[1],p[2]);};
+  });
+}
+
+/* -- RENDER COUNTS -- */
+function dRenderCounts(data){
+  var g=function(id){return document.getElementById(id);};
+  var tracks=[{k:'siebel',l:'Siebel'},{k:'mw',l:'Middleware'},{k:'bi',l:'BI'},{k:'infra',l:'Infra'}];
+  if(g('dc-dhd'))g('dc-dhd').textContent=data.dhd||0;
+  if(g('dc-cub'))g('dc-cub').textContent=data.cub||0;
+  if(g('dc-email'))g('dc-email').textContent=data.email||0;
+  if(g('dc-d24'))g('dc-d24').textContent=data.d24||0;
+  var t24=(data.dhd||0)+(data.cub||0)+(data.email||0)+(data.d24||0);
+  var t24el=g('dc-total24');if(t24el){t24el.textContent=t24;t24el.className='dcount-val '+(t24>=5?'danger':t24>=1?'warning':'ok');}
+  var ph='';
+  [{l:'P1',v:data.p1||0,cls:'p1'},{l:'P2',v:data.p2||0,cls:'p2'},{l:'P3',v:data.p3||0,cls:'p3'},{l:'P4',v:data.p4||0,cls:'p4'}].forEach(function(x){
+    ph+='<div class="dp-pill"><span class="dp-pill-label">'+x.l+'</span><span class="dp-pill-val '+x.cls+'">'+x.v+'</span></div>';
+  });
+  if(g('d-priority-row'))g('d-priority-row').innerHTML=ph;
+  var b3=data.b3||{};var b3T=0;var bh='';
+  tracks.forEach(function(t){
+    var tv=b3[t.k]||{c:0,u:0};var tot=(tv.c||0)+(tv.u||0);b3T+=tot;if(!tot)return;
+    bh+='<div class="dtrack-row"><span class="dtrack-name">'+t.l+'</span><div class="dtrack-sub"><span class="dtrack-sub-item">Cubastion: <span>'+tv.c+'</span></span><span class="dtrack-sub-item">User: <span>'+tv.u+'</span></span><span class="dtrack-sub-item" style="color:#991b1b;font-weight:600">Total: '+tot+'</span></div></div>';
+  });
+  if(!bh)bh='<p style="font-size:12px;color:#888780;font-style:italic;padding:6px 0">No blocked incidents.</p>';
+  if(g('db3-breakdown'))g('db3-breakdown').innerHTML=bh;
+  var b3el=g('db3-total');if(b3el){b3el.textContent=b3T;b3el.className='dcount-val '+(b3T>=5?'danger':b3T>=1?'warning':'ok');}
+  var sr=data.sr||{};var srT=0;var sh='';
+  tracks.forEach(function(t){
+    var sv=sr[t.k]||{c:0,u:0};var stot=(sv.c||0)+(sv.u||0);srT+=stot;if(!stot)return;
+    sh+='<div class="dtrack-row"><span class="dtrack-name">'+t.l+'</span><div class="dtrack-sub"><span class="dtrack-sub-item">Cubastion: <span>'+sv.c+'</span></span><span class="dtrack-sub-item">User: <span>'+sv.u+'</span></span><span class="dtrack-sub-item" style="color:#92400e;font-weight:600">Total: '+stot+'</span></div></div>';
+  });
+  if(!sh)sh='<p style="font-size:12px;color:#888780;font-style:italic;padding:6px 0">No blocked SRs.</p>';
+  if(g('dsr-total')){g('dsr-total').textContent=srT;g('dsr-total').className='dcount-val '+(srT>=5?'danger':srT>=1?'warning':'ok');}
+  if(g('dsr-breakdown'))g('dsr-breakdown').innerHTML=sh;
+  if(g('d-counts-meta'))g('d-counts-meta').textContent='Blocked >3d: '+b3T+' \u00b7 SR >5d: '+srT+' \u00b7 P1:'+(data.p1||0)+' P2:'+(data.p2||0)+' P3:'+(data.p3||0)+' P4:'+(data.p4||0);
+}
+
+/* -- CARD BUILDERS -- */
+function dBuildCard(item,isRitm,isSnap){
+  var safe=item.id.replace(/[^a-zA-Z0-9]/g,'');
+  var chipCls=isRitm?'dchip purple':'dchip blue';
+  var field=isRitm?'ritms':'incidents';
+  var thBtn=isSnap?'':'<button class="dth-btn" onclick="dToggleTH(\''+item.id+'\',this,\''+field+'\')">&#128337; Previous updates</button>';
+  var thDiv=isSnap?'':'<div class="dth-wrap" id="dth-'+safe+'"></div>';
+  var ageNum=item.createdOn?dAgeFromCreatedOn(item.createdOn,D.date):(item.age||0);
+  var ageCls='';var ageBadge='';
+  if(ageNum>=20){ageCls=' age-critical';ageBadge='<span class="dage-badge-critical">&#128308; &gt;20 days</span>';}
+  else if(ageNum>=10){ageCls=' age-warning';ageBadge='<span class="dage-badge-warning">&#9888; &gt;10 days</span>';}
+  return '<div class="dcard '+item.sev+ageCls+'">'+
+    '<div class="dcard-hdr"><span>'+dSnowLink(item.id)+'</span>'+
+    '<div style="display:flex;gap:5px;flex-wrap:wrap">'+dSevBadge(item.sev)+'<span class="dbadge gray">'+item.track+'</span>'+(item.createdOn?'<span class="dbadge gray">'+item.createdOn+'</span>':'')+ageBadge+'</div></div>'+
+    '<div class="dcard-title">'+item.title+'</div>'+
+    '<div class="dcard-status">'+item.status+'</div>'+
+    '<div class="dchips"><span class="dchip">&#128274; Blocked: '+item.blocked+'</span><span class="'+chipCls+'">&#8594; Next: '+item.next+'</span></div>'+
+    thBtn+thDiv+'</div>';
+}
+function dBuildCRCard(item,isSnap){
+  var safe=item.id.replace(/[^a-zA-Z0-9]/g,'');
+  var thBtn=isSnap?'':'<button class="dth-btn" onclick="dToggleTH(\''+item.id+'\',this,\'crs\')">&#128337; Previous updates</button>';
+  var thDiv=isSnap?'':'<div class="dth-wrap" id="dth-'+safe+'"></div>';
+  var url=SNOW+'/nav_to.do?uri=change_request.do?sysparm_query=number='+item.id;
+  var idLink='<a href="'+url+'" target="_blank" rel="noopener" style="color:#ea580c;font-family:monospace;font-size:12px;font-weight:600;text-decoration:none;border-bottom:1px dashed #ea580c">'+item.id+' &#8599;</a>';
+  return '<div class="dcr-card '+(item.status||'open')+'">'+
+    '<div class="dcard-hdr"><span>'+idLink+'</span>'+
+    '<div style="display:flex;gap:5px;flex-wrap:wrap">'+dCrBadge(item.status||'open')+'<span class="dbadge gray">'+item.track+'</span>'+(item.createdOn?'<span class="dbadge gray">'+item.createdOn+'</span>':'')+'</div></div>'+
+    '<div class="dcard-title">'+item.title+'</div>'+
+    '<div class="dcard-status">'+(item.status_text||'')+'</div>'+
+    '<div class="dchips"><span class="dchip blue">&#8594; Next: '+item.next+'</span></div>'+
+    thBtn+thDiv+'</div>';
+}
+
+/* -- GROUPED RENDER -- */
+function dRenderGrouped(items,cardsId,isRitm){
+  var trackOrder=['Siebel','MW','BI','Infra'];
+  var groups={};
+  (items||[]).forEach(function(item){var t=item.track||'Other';if(!groups[t])groups[t]=[];groups[t].push(item);});
+  Object.keys(groups).forEach(function(t){if(trackOrder.indexOf(t)<0)trackOrder.push(t);});
+  var el=document.getElementById(cardsId);if(!el)return;
+  if(!items||!items.length){el.innerHTML='<div class="dno-cards">No '+(isRitm?'RITMs':'incidents')+' today.</div>';return;}
+  var col=isRitm?'#7c3aed':'#1d4ed8';var bg=isRitm?'#ede9fe':'#eff6ff';
+  var html='';var hasAny=false;
+  trackOrder.forEach(function(track){
+    var list=groups[track]||[];if(!list.length)return;
+    hasAny=true;
+    html+='<div class="dtrack-group"><div class="dtrack-group-hdr"><span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:'+col+'">'+track+'</span><span style="font-size:11px;padding:1px 8px;border-radius:20px;background:'+bg+';color:'+col+';font-weight:600">'+list.length+'</span></div>';
+    list.forEach(function(item){html+=dBuildCard(item,isRitm,false);});
+    html+='</div>';
+  });
+  el.innerHTML=hasAny?html:'<div class="dno-cards">No '+(isRitm?'RITMs':'incidents')+' today.</div>';
+}
+function dRenderCRSection(crs){
+  var el=document.getElementById('d-cr-cards');var meta=document.getElementById('d-cr-meta');
+  if(!el)return;var list=crs||[];
+  if(meta)meta.textContent=list.length+' change request'+(list.length!==1?'s':'');
+  if(!list.length){el.innerHTML='<div class="dno-cards">No change requests today.</div>';return;}
+  var html='';list.forEach(function(cr){html+=dBuildCRCard(cr,false);});
+  el.innerHTML=html;
+}
+
+/* -- PER-TICKET HISTORY -- */
+function dToggleTH(tid,btn,field){
+  var safe=tid.replace(/[^a-zA-Z0-9]/g,'');
+  var el=document.getElementById('dth-'+safe);if(!el)return;
+  if(el.style.display==='block'){el.style.display='none';btn.innerHTML='&#128337; Previous updates';return;}
+  var h=dLoadHist();var entries=[];
+  h.forEach(function(snap){
+    (snap[field]||[]).forEach(function(x){
+      if(x.id===tid)entries.push({date:snap.date,time:snap.savedAt||'',sev:x.sev,status:x.status,blocked:x.blocked,next:x.next});
+    });
+  });
+  if(!entries.length){el.innerHTML='<p class="dtl-empty">No previous updates yet.</p>';}
+  else{
+    var html='';
+    entries.forEach(function(e,i){
+      html+='<div class="dtl-row"><div class="dtl-left"><div class="dtl-dot '+e.sev+'"></div>'+(i<entries.length-1?'<div class="dtl-line"></div>':'')+'</div>'+
+        '<div class="dtl-body"><div class="dtl-date">'+e.date+(e.time?' \u00b7 '+e.time:'')+'</div>'+
+        '<div class="dtl-status">'+e.status+'</div><div class="dtl-meta">Blocked: '+e.blocked+' \u00b7 Next: '+e.next+'</div></div></div>';
+    });
+    el.innerHTML=html;
+  }
+  el.style.display='block';btn.innerHTML='&#8593; Hide updates';
+}
+
+/* -- MAIN RENDER -- */
+function dRender(data){
+  var g=function(id){return document.getElementById(id);};
+  if(g('d-sub'))g('d-sub').textContent=(data.date||'')+' \u00b7 TCAS / AMS \u00b7 '+(data.name||'');
+  dRenderCounts(data);
+  var incs=data.incidents||[];
+  var majC=incs.filter(function(x){return x.sev==='major';}).length;
+  var burC=incs.filter(function(x){return x.sev==='burning';}).length;
+  if(g('d-inc-meta'))g('d-inc-meta').textContent=incs.length+' total \u00b7 '+majC+' major \u00b7 '+burC+' burning';
+  dRenderGrouped(incs,'d-inc-cards',false);
+  var ritms=data.ritms||[];
+  if(g('d-ritm-meta'))g('d-ritm-meta').textContent=ritms.length+' total';
+  dRenderGrouped(ritms,'d-ritm-cards',true);
+  dRenderCRSection(data.crs||[]);
+  var pocs=data.pocs||[];var ah='';
+  pocs.forEach(function(x){
+    var pc=x.present==='Yes'?'#166534':'#888780';var pb=x.present==='Yes'?'#dcfce7':'#f1efea';
+    ah+='<tr><td style="color:#73726c">'+x.role+'</td><td><strong>'+(x.name||'')+'</strong></td><td><span style="font-size:11px;padding:2px 10px;border-radius:20px;background:'+pb+';color:'+pc+';font-weight:600">'+x.present+'</span></td></tr>';
+  });
+  if(g('d-v-act'))g('d-v-act').innerHTML=ah||'<tr><td colspan="3" style="color:#888780;font-style:italic;padding:10px">No POC data.</td></tr>';
+  if(g('d-v-foot'))g('d-v-foot').textContent='Last updated: '+(data.date||'')+(data.savedAt?' at '+data.savedAt:'')+' \u00b7 Prepared by '+(data.name||'');
+}
+
+/* -- HISTORY PANEL -- */
+function dOpenHist(){
+  document.getElementById('d-hist-panel').style.display='block';
+  document.getElementById('d-snap-wrap').style.display='none';
+  document.getElementById('upd-btn').style.display='none';
+  document.getElementById('hist-btn').style.display='none';
+  dBuildDateList();
+}
+function dCloseHist(){
+  document.getElementById('d-hist-panel').style.display='none';
+  document.getElementById('upd-btn').style.display='inline-flex';
+  document.getElementById('hist-btn').style.display='inline-flex';
+}
+function dCloseSnap(){document.getElementById('d-snap-wrap').style.display='none';dCurrentSnap=null;}
+function dToggleGroup(gid){
+  var el=document.getElementById(gid);var ar=document.getElementById('dar-'+gid);
+  if(!el)return;var open=el.style.display==='flex';
+  el.style.display=open?'none':'flex';if(ar)ar.innerHTML=open?'&#9660;':'&#9650;';
+}
+function dBuildDateList(){
+  var h=dLoadHist();var wrap=document.getElementById('d-date-list');
+  if(!h.length){wrap.innerHTML='<div class="dno-hist">&#128337; No past updates yet.</div>';return;}
+  var groups={},order=[];
+  h.forEach(function(s,i){if(!groups[s.date]){groups[s.date]=[];order.push(s.date);}groups[s.date].push({s:s,i:i});});
+  var html='<p style="font-size:12px;color:#73726c;margin-bottom:10px">'+order.length+' date'+(order.length!==1?'s':'')+' \u00b7 '+h.length+' snapshots</p>';
+  order.forEach(function(date,d){
+    var entries=groups[date],latest=entries[0].s,rc=(latest.ritms||[]).length,gid='dg'+d;
+    var inner='<div id="'+gid+'" style="display:none;flex-direction:column;gap:4px;padding:4px 0 0 18px">';
+    entries.forEach(function(e){
+      var sn=e.s,ix=e.i,src=(sn.ritms||[]).length;
+      inner+='<div class="dtime-entry" onclick="dViewSnap('+ix+')">'+
+        '<div><div class="dte-time">&#128336; '+(sn.savedAt||'--:-- --')+'</div>'+
+        '<div class="dte-meta">'+(sn.incidents||[]).length+' INC \u00b7 '+src+' RITM \u00b7 by '+sn.name+'</div></div>'+
+        '<div style="display:flex;gap:5px;align-items:center">'+
+          (sn.p1>0?'<span class="dd-chip">P1:'+sn.p1+'</span>':'')+
+          (src>0?'<span class="dd-chip purple">'+src+' RITM</span>':'')+
+          '<span style="color:#73726c;font-size:16px">&#8250;</span>'+
+        '</div></div>';
+    });
+    inner+='</div>';
+    html+='<div class="ddate-group">'+
+      '<div class="ddate-hdr" onclick="dToggleGroup(\''+gid+'\')">'+
+        '<div><div class="ddh-date">'+date+'</div><div class="ddh-meta">'+entries.length+' save'+(entries.length!==1?'s':'')+' \u00b7 Latest: '+(latest.savedAt||'--:-- --')+'</div></div>'+
+        '<div style="display:flex;gap:8px;align-items:center">'+
+          (latest.p1>0?'<span class="dd-chip">P1:'+latest.p1+'</span>':'')+
+          (rc>0?'<span class="dd-chip purple">'+rc+' RITM</span>':'')+
+          '<span id="dar-'+gid+'" style="font-size:16px;color:#73726c">&#9660;</span></div>'+
+      '</div>'+inner+'</div>';
+  });
+  wrap.innerHTML=html;
+}
+function dViewSnap(idx){
+  var h=dLoadHist();var snap=h[idx];if(!snap)return;
+  dCurrentSnap=snap;
+  document.getElementById('d-snap-label').textContent='Viewing: '+snap.date+' at '+(snap.savedAt||'--:-- --')+' (by '+snap.name+')';
+  var sc=document.getElementById('d-snap-content');
+  var ih='',rh='',crh='',pocAh='';
+  (snap.incidents||[]).forEach(function(item){ih+=dBuildCard(item,false,true);});
+  (snap.ritms||[]).forEach(function(item){rh+=dBuildCard(item,true,true);});
+  (snap.crs||[]).forEach(function(item){crh+=dBuildCRCard(item,true);});
+  (snap.pocs||[]).forEach(function(x){
+    var pc=x.present==='Yes'?'#166534':'#888780';var pb=x.present==='Yes'?'#dcfce7':'#f1efea';
+    pocAh+='<tr><td style="color:#73726c">'+x.role+'</td><td><strong>'+(x.name||'')+'</strong></td><td><span style="font-size:11px;padding:2px 10px;border-radius:20px;background:'+pb+';color:'+pc+';font-weight:600">'+x.present+'</span></td></tr>';
+  });
+  sc.innerHTML=
+    '<div style="font-size:13px;color:#5f5e5a;margin-bottom:12px;background:#fff;border-radius:10px;padding:12px;border:0.5px solid #e0dfd6">'+
+      '<strong>DHD:</strong> '+(snap.dhd||0)+'  <strong>Cubastion:</strong> '+(snap.cub||0)+'  <strong>Emails:</strong> '+(snap.email||0)+'  <strong>P1:</strong> '+(snap.p1||0)+' <strong>P2:</strong> '+(snap.p2||0)+' <strong>P3:</strong> '+(snap.p3||0)+' <strong>P4:</strong> '+(snap.p4||0)+'</div>'+
+    '<div style="font-size:13px;font-weight:600;color:#1a1a18;margin:12px 0 6px">Incidents</div>'+(ih||'<div class="dno-cards">No incidents.</div>')+
+    '<div style="font-size:13px;font-weight:600;color:#5b21b6;margin:12px 0 6px">&#9679; RITM</div>'+(rh||'<div class="dno-cards">No RITMs.</div>')+
+    '<div style="font-size:13px;font-weight:600;color:#ea580c;margin:12px 0 6px">&#9881; Change Requests</div>'+(crh||'<div class="dno-cards">No CRs.</div>')+
+    '<div style="font-size:13px;font-weight:600;color:#1a1a18;margin:12px 0 6px">POC Details</div>'+
+    '<table class="dact-table" style="background:#fff;border-radius:10px;border:.5px solid #e0dfd6"><thead><tr><th>Role</th><th>Name</th><th>Present</th></tr></thead><tbody>'+pocAh+'</tbody></table>'+
+    '<p style="font-size:12px;color:#888780;margin-top:12px">Saved: '+snap.date+(snap.savedAt?' at '+snap.savedAt:'')+' \u00b7 by '+snap.name+'</p>';
+  document.getElementById('d-export-bar').style.display='flex';
+  document.getElementById('d-snap-wrap').style.display='block';
+  document.getElementById('d-snap-wrap').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* -- EXPORT -- */
+function dBuildArchiveHTML(snap){
+  function ns(v){return v>=5?'#991b1b':v>=1?'#92400e':'#166534';}
+  function sevPill(s){
+    var bg={major:'#fee2e2',burning:'#fef3c7',monitoring:'#f1efea',resolved:'#dcfce7',pending:'#ede9fe'};
+    var tc={major:'#991b1b',burning:'#92400e',monitoring:'#5f5e5a',resolved:'#166534',pending:'#5b21b6'};
+    var lb={major:'Major',burning:'Burning',monitoring:'Monitoring',resolved:'Resolved',pending:'Pending'};
+    return '<span style="font-size:11px;background:'+(bg[s]||'#f1efea')+';color:'+(tc[s]||'#5f5e5a')+';padding:2px 9px;border-radius:20px;font-weight:600">'+(lb[s]||s)+'</span>';
+  }
+  function idA(id,isR){
+    var tbl=isR?'sc_req_item.do':'incident.do';
+    var url='https://daimlertruck.service-now.com/nav_to.do?uri='+tbl+'?sysparm_query=number='+id;
+    var col=isR?'#7c3aed':'#1d4ed8';var bg=isR?'#ede9fe':'#eff6ff';
+    return '<a href="'+url+'" target="_blank" style="font-family:monospace;font-size:11px;background:'+bg+';color:'+col+';padding:2px 7px;border-radius:4px;font-weight:600;text-decoration:none;border-bottom:1px dashed '+col+'">'+id+' &#8599;</a>';
+  }
+  function card2(item,isR){
+    var lc={major:'#e24b4a',burning:'#ba7517',monitoring:'#888780',resolved:'#16a34a',pending:'#7c3aed'};
+    var chipBg=isR?'#ede9fe':'#eff6ff',chipCol=isR?'#5b21b6':'#1d4ed8';
+    return '<div style="background:#fff;border:.5px solid #e0dfd6;border-left:3px solid '+(lc[item.sev]||'#888780')+';border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+idA(item.id,isR)+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap">'+sevPill(item.sev)+
+      '<span style="font-size:11px;background:#f1efea;color:#5f5e5a;border:.5px solid #d3d1c7;padding:2px 8px;border-radius:20px">'+item.track+'</span>'+
+      (item.createdOn?'<span style="font-size:11px;background:#f1efea;color:#888780;padding:2px 8px;border-radius:20px">'+item.createdOn+'</span>':'')+'</div></div>'+
+      '<p style="font-size:14px;font-weight:600;color:#1a1a18;margin:0 0 4px">'+item.title+'</p>'+
+      '<p style="font-size:13px;color:#5f5e5a;line-height:1.6;margin:0 0 10px">'+item.status+'</p>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px">'+
+        '<span style="font-size:11px;padding:3px 9px;border-radius:6px;background:#f1efea;color:#5f5e5a;border:.5px solid #d3d1c7">&#128274; '+item.blocked+'</span>'+
+        '<span style="font-size:11px;padding:3px 9px;border-radius:6px;background:'+chipBg+';color:'+chipCol+'">&#8594; '+item.next+'</span>'+
+      '</div></div>';
+  }
+  function crCard2(item){
+    var lc={'open':'#ea580c','in-progress':'#d97706','completed':'#16a34a','cancelled':'#888780'};
+    var url='https://daimlertruck.service-now.com/nav_to.do?uri=change_request.do?sysparm_query=number='+item.id;
+    return '<div style="background:#fff;border:.5px solid #e0dfd6;border-left:3px solid '+(lc[item.status]||'#888780')+';border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:6px">'+
+        '<a href="'+url+'" target="_blank" style="font-family:monospace;font-size:11px;background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:4px;font-weight:600;text-decoration:none;border-bottom:1px dashed #ea580c">'+item.id+' &#8599;</a>'+
+        '<span style="font-size:11px;background:#fff7ed;color:#c2410c;border:.5px solid #fed7aa;padding:2px 8px;border-radius:20px">'+item.status+'</span>'+
+      '</div>'+
+      '<p style="font-size:14px;font-weight:600;color:#1a1a18;margin:0 0 4px">'+item.title+'</p>'+
+      '<p style="font-size:13px;color:#5f5e5a;line-height:1.6;margin:0 0 8px">'+(item.status_text||'')+'</p>'+
+      '<span style="font-size:11px;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#1d4ed8">&#8594; '+item.next+'</span>'+
+    '</div>';
+  }
+  var ih='',rh='',crh='',pocH='',mh='';
+  (snap.incidents||[]).forEach(function(i){ih+=card2(i,false);});
+  (snap.ritms||[]).forEach(function(i){rh+=card2(i,true);});
+  (snap.crs||[]).forEach(function(i){crh+=crCard2(i);});
+  (snap.pocs||[]).forEach(function(x,i){
+    var pc=x.present==='Yes'?'#166534':'#888780';var pb=x.present==='Yes'?'#dcfce7':'#f1efea';
+    pocH+='<tr style="background:'+(i%2?'#f8f8f6':'#fff')+'">'+
+      '<td style="padding:8px 12px;border-bottom:.5px solid #e0dfd6;color:#73726c">'+x.role+'</td>'+
+      '<td style="padding:8px 12px;border-bottom:.5px solid #e0dfd6;font-weight:600">'+x.name+'</td>'+
+      '<td style="padding:8px 12px;border-bottom:.5px solid #e0dfd6"><span style="font-size:11px;padding:2px 10px;border-radius:20px;background:'+pb+';color:'+pc+';font-weight:600">'+x.present+'</span></td></tr>';
+  });
+  var ms=[{l:'DHD Incidents',v:snap.dhd||0},{l:'Cubastion Incidents',v:snap.cub||0},{l:'Emails',v:snap.email||0},{l:'Alerts',v:snap.d24||0},{l:'P1',v:snap.p1||0,n:true},{l:'P2',v:snap.p2||0,n:true},{l:'P3',v:snap.p3||0,n:true},{l:'P4',v:snap.p4||0,n:true}];
+  ms.forEach(function(x){mh+='<div style="background:#fff;border:.5px solid #e0dfd6;border-radius:10px;padding:10px 14px;text-align:center"><div style="font-size:11px;color:#73726c;margin-bottom:3px">'+x.l+'</div><div style="font-size:20px;font-weight:700;color:'+(x.n?'#1a1a18':ns(x.v))+'">'+x.v+'</div></div>';});
+  function sh(t,c){return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:'+(c||'#888780')+';margin:20px 0 8px;padding-bottom:5px;border-bottom:1.5px solid '+(c?'#c4b5fd':'#e0dfd6')+'">'+t+'</div>';}
+  var mc=0,bc=0;
+  (snap.incidents||[]).forEach(function(i){if(i.sev==='major')mc++;if(i.sev==='burning')bc++;});
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Standup Archive - '+snap.date+'</title>'+
+    '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0efe9;padding:24px;color:#1a1a18}</style></head><body>'+
+    '<div style="max-width:860px;margin:0 auto">'+
+    '<div style="background:linear-gradient(135deg,#1d4ed8 0%,#312e81 100%);border-radius:12px;padding:28px 32px;margin-bottom:20px;color:#fff">'+
+      '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;opacity:.7;margin-bottom:8px">Archive Report - TCAS / AMS</div>'+
+      '<div style="font-size:28px;font-weight:700;margin-bottom:4px">Daily Ops Standup</div>'+
+      '<div style="font-size:16px;opacity:.85;margin-bottom:16px">'+snap.date+(snap.savedAt?' - '+snap.savedAt:'')+' - by '+snap.name+'</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:16px;font-size:13px;opacity:.9">'+
+        '<span>&#128204; '+(snap.incidents||[]).length+' Incidents</span>'+
+        '<span>&#128203; '+(snap.ritms||[]).length+' RITMs</span>'+
+        '<span>&#9881; '+(snap.crs||[]).length+' CRs</span>'+
+        (mc?'<span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:20px">&#128308; '+mc+' Major</span>':'')+
+        (bc?'<span style="background:rgba(255,255,255,.15);padding:2px 10px;border-radius:20px">&#128993; '+bc+' Burning</span>':'')+
+      '</div></div>'+
+    '<div style="background:#fff;border-radius:12px;padding:24px 28px;border:.5px solid #e0dfd6;margin-bottom:16px">'+
+      sh('Ticket Summary')+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-bottom:4px">'+mh+'</div>'+
+      sh('Incidents')+(ih||'<p style="color:#888780;font-style:italic;font-size:13px;padding:10px 0">No incidents.</p>')+
+      sh('RITM','#5b21b6')+(rh||'<p style="color:#888780;font-style:italic;font-size:13px;padding:10px 0">No RITMs.</p>')+
+      sh('Change Requests','#ea580c')+(crh||'<p style="color:#888780;font-style:italic;font-size:13px;padding:10px 0">No CRs.</p>')+
+      sh('POC Details')+
+      '<table style="width:100%;border-collapse:collapse;border:.5px solid #e0dfd6;border-radius:8px;overflow:hidden">'+
+        '<thead><tr style="background:#f8f8f6">'+
+          '<th style="padding:9px 12px;text-align:left;font-size:11px;color:#888780;font-weight:700;border-bottom:1px solid #e0dfd6">Role</th>'+
+          '<th style="padding:9px 12px;text-align:left;font-size:11px;color:#888780;font-weight:700;border-bottom:1px solid #e0dfd6">Name</th>'+
+          '<th style="padding:9px 12px;text-align:left;font-size:11px;color:#888780;font-weight:700;border-bottom:1px solid #e0dfd6">Present</th>'+
+        '</tr></thead><tbody>'+pocH+'</tbody></table>'+
+    '</div>'+
+    '<div style="text-align:center;font-size:12px;color:#888780;padding:8px 0">TCAS / AMS - Archive - '+snap.date+(snap.savedAt?' at '+snap.savedAt:'')+' - '+snap.name+'</div>'+
+    '</div></body></html>';
+}
+
+function dDoDownload(){
+  if(!dCurrentSnap)return;
+  var html=dBuildArchiveHTML(dCurrentSnap);
+  var blob=new Blob([html],{type:'text/html'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='standup-'+dCurrentSnap.date.replace(/ /g,'-')+'.html';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+}
+function dDoCopy(btn){
+  if(!dCurrentSnap)return;
+  var html=dBuildArchiveHTML(dCurrentSnap);
+  var orig=btn.innerHTML;
+  function flash(){btn.innerHTML='&#10003; Copied! Paste into Confluence HTML macro.';btn.style.background='#dcfce7';btn.style.color='#166534';setTimeout(function(){btn.innerHTML=orig;btn.style.background='';btn.style.color='';},3000);}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(html).then(flash).catch(function(){dFbCopy(html,flash);});}
+  else{dFbCopy(html,flash);}
+}
+function dFbCopy(text,cb){var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);if(cb)cb();}
+
+/* -- FORM FIELD BUILDERS -- */
+function dAddIncF(d){
+  var id='dif'+iC++;
+  document.getElementById('d-inc-fields').insertAdjacentHTML('beforeend',
+    '<div class="dfb" id="'+id+'"><button class="drm-btn" onclick="document.getElementById(\''+id+'\').remove()">Remove</button>'+
+    '<div class="dfr"><div><label>INC number</label><input type="text" class="dfi-id" value="'+(d?d.id:'')+'" placeholder="INC1234567"></div>'+
+    '<div><label>Track</label><select class="dfi-tr"><option'+(d&&d.track==='Siebel'?' selected':'')+'>Siebel</option><option'+(d&&d.track==='MW'?' selected':'')+'>MW</option><option'+(d&&d.track==='BI'?' selected':'')+'>BI</option><option'+(d&&d.track==='Infra'?' selected':'')+'>Infra</option></select></div></div>'+
+    '<div class="dfr full"><label>Title</label><input type="text" class="dfi-ti" value="'+(d?d.title:'')+'" placeholder="Short description"></div>'+
+    '<div class="dfr full"><label>Severity</label><select class="dfi-sv"><option value="major"'+(d&&d.sev==='major'?' selected':'')+'>Major</option><option value="burning"'+(d&&d.sev==='burning'?' selected':'')+'>Burning</option><option value="monitoring"'+(d&&d.sev==='monitoring'?' selected':'')+'>Monitoring</option><option value="resolved"'+(d&&d.sev==='resolved'?' selected':'')+'>Resolved</option></select></div>'+
+    '<div class="dfr"><div><label>Created date</label><input type="text" class="dfi-cr" value="'+(d&&d.createdOn?d.createdOn:'')+'" placeholder="09 Apr 2026"></div><div></div></div>'+
+    '<div class="dfr full"><label>Today\'s status</label><textarea class="dfi-st">'+(d?d.status:'')+'</textarea></div>'+
+    '<div class="dfr"><div><label>Blocked by</label><input type="text" class="dfi-bl" value="'+(d?d.blocked:'None')+'"></div>'+
+    '<div><label>Next action</label><input type="text" class="dfi-nx" value="'+(d?d.next:'')+'"></div></div></div>');
+}
+function dAddRitmF(d){
+  var id='drf'+rC++;
+  document.getElementById('d-ritm-fields').insertAdjacentHTML('beforeend',
+    '<div class="dfb ritm" id="'+id+'"><button class="drm-btn" onclick="document.getElementById(\''+id+'\').remove()">Remove</button>'+
+    '<div class="dfr"><div><label>RITM number</label><input type="text" class="dri-id" value="'+(d?d.id:'')+'" placeholder="RITM0001234"></div>'+
+    '<div><label>Track</label><select class="dri-tr"><option'+(d&&d.track==='Siebel'?' selected':'')+'>Siebel</option><option'+(d&&d.track==='MW'?' selected':'')+'>MW</option><option'+(d&&d.track==='BI'?' selected':'')+'>BI</option><option'+(d&&d.track==='Infra'?' selected':'')+'>Infra</option></select></div></div>'+
+    '<div class="dfr full"><label>Title</label><input type="text" class="dri-ti" value="'+(d?d.title:'')+'" placeholder="Short description"></div>'+
+    '<div class="dfr full"><label>Status</label><select class="dri-sv"><option value="pending"'+(d&&d.sev==='pending'?' selected':'')+'>Pending</option><option value="monitoring"'+(d&&d.sev==='monitoring'?' selected':'')+'>In Progress</option><option value="burning"'+(d&&d.sev==='burning'?' selected':'')+'>Delayed</option><option value="resolved"'+(d&&d.sev==='resolved'?' selected':'')+'>Resolved</option></select></div>'+
+    '<div class="dfr"><div><label>Created date</label><input type="text" class="dri-cr" value="'+(d&&d.createdOn?d.createdOn:'')+'" placeholder="09 Apr 2026"></div><div></div></div>'+
+    '<div class="dfr full"><label>Today\'s status</label><textarea class="dri-st">'+(d?d.status:'')+'</textarea></div>'+
+    '<div class="dfr"><div><label>Blocked by</label><input type="text" class="dri-bl" value="'+(d?d.blocked:'None')+'"></div>'+
+    '<div><label>Next action</label><input type="text" class="dri-nx" value="'+(d?d.next:'')+'"></div></div></div>');
+}
+function dAddCRF(d){
+  var id='dcf'+crC++;
+  document.getElementById('d-cr-fields').insertAdjacentHTML('beforeend',
+    '<div class="dfb" style="border-color:#fed7aa" id="'+id+'"><button class="drm-btn" onclick="document.getElementById(\''+id+'\').remove()">Remove</button>'+
+    '<div class="dfr"><div><label>CR number</label><input type="text" class="dcf-id" value="'+(d?d.id:'')+'" placeholder="CHG0001234"></div>'+
+    '<div><label>Track</label><select class="dcf-tr"><option'+(d&&d.track==='Siebel'?' selected':'')+'>Siebel</option><option'+(d&&d.track==='MW'?' selected':'')+'>MW</option><option'+(d&&d.track==='BI'?' selected':'')+'>BI</option><option'+(d&&d.track==='Infra'?' selected':'')+'>Infra</option></select></div></div>'+
+    '<div class="dfr full"><label>Title</label><input type="text" class="dcf-ti" value="'+(d?d.title:'')+'" placeholder="Short description"></div>'+
+    '<div class="dfr"><div><label>Status</label><select class="dcf-st"><option value="open"'+(d&&d.status==='open'?' selected':'')+'>Open</option><option value="in-progress"'+(d&&d.status==='in-progress'?' selected':'')+'>In Progress</option><option value="completed"'+(d&&d.status==='completed'?' selected':'')+'>Completed</option><option value="cancelled"'+(d&&d.status==='cancelled'?' selected':'')+'>Cancelled</option></select></div>'+
+    '<div><label>Created date</label><input type="text" class="dcf-cr" value="'+(d?d.createdOn||'':'')+'" placeholder="09 Apr 2026"></div></div>'+
+    '<div class="dfr full"><label>Status update</label><textarea class="dcf-sx">'+(d?d.status_text||'':'')+'</textarea></div>'+
+    '<div class="dfr full"><label>Next action</label><input type="text" class="dcf-nx" value="'+(d?d.next||'':'')+'" placeholder="Who does what by when"></div></div>');
+}
+function dAddPocF(d){
+  var id='dpf'+pocC++;
+  document.getElementById('d-poc-fields').insertAdjacentHTML('beforeend',
+    '<div class="dfb" id="'+id+'"><button class="drm-btn" onclick="document.getElementById(\''+id+'\').remove()">Remove</button>'+
+    '<div class="dfr"><div><label>Role</label><input type="text" class="dpf-ro" value="'+(d?d.role||'':'')+'" placeholder="e.g. AMS Lead"></div>'+
+    '<div><label>Name</label><input type="text" class="dpf-nm" value="'+(d?d.name||'':'')+'" placeholder="e.g. Pankaj"></div></div>'+
+    '<div class="dfr full"><label>Present</label><select class="dpf-pr">'+
+    '<option value="Yes"'+(d&&d.present==='Yes'?' selected':'')+'>Yes</option>'+
+    '<option value="No"'+(d&&d.present==='No'?' selected':'')+'>No</option>'+
+    '<option value="NA"'+(d&&d.present==='NA'?' selected':'')+'>NA</option>'+
+    '</select></div></div>');
+}
+
+/* -- OPEN / CLOSE FORM -- */
+function dOpenForm(){
+  document.getElementById('d-form-wrap').style.display='block';
+  document.getElementById('upd-btn').style.display='none';
+  document.getElementById('hist-btn').style.display='none';
+  iC=0;rC=0;crC=0;pocC=0;
+  var fv=function(id,v){var el=document.getElementById(id);if(el)el.value=v;};
+  fv('df-date',D.date||'');fv('df-name',D.name||'');
+  fv('df-dhd',D.dhd||0);fv('df-cub',D.cub||0);fv('df-email',D.email||0);fv('df-d24',D.d24||0);
+  fv('df-p1',D.p1||0);fv('df-p2',D.p2||0);fv('df-p3',D.p3||0);fv('df-p4',D.p4||0);
+  var b3=D.b3||{siebel:{c:0,u:0},mw:{c:0,u:0},bi:{c:0,u:0},infra:{c:0,u:0}};
+  var sr=D.sr||{siebel:{c:0,u:0},mw:{c:0,u:0},bi:{c:0,u:0},infra:{c:0,u:0}};
+  fv('db3-sc',b3.siebel.c||0);fv('db3-su',b3.siebel.u||0);
+  fv('db3-mc',b3.mw.c||0);fv('db3-mu',b3.mw.u||0);
+  fv('db3-bc',b3.bi.c||0);fv('db3-bu',b3.bi.u||0);
+  fv('db3-ic',b3.infra.c||0);fv('db3-iu',b3.infra.u||0);
+  fv('dsr-sc',sr.siebel.c||0);fv('dsr-su',sr.siebel.u||0);
+  fv('dsr-mc',sr.mw.c||0);fv('dsr-mu',sr.mw.u||0);
+  fv('dsr-bc',sr.bi.c||0);fv('dsr-bu',sr.bi.u||0);
+  fv('dsr-ic',sr.infra.c||0);fv('dsr-iu',sr.infra.u||0);
+  document.getElementById('d-inc-fields').innerHTML='';
+  document.getElementById('d-ritm-fields').innerHTML='';
+  document.getElementById('d-cr-fields').innerHTML='';
+  document.getElementById('d-poc-fields').innerHTML='';
+  (D.incidents||[]).forEach(function(d){dAddIncF(d);});
+  (D.ritms||[]).forEach(function(d){dAddRitmF(d);});
+  (D.crs||[]).forEach(function(d){dAddCRF(d);});
+  (D.pocs||[]).forEach(function(d){dAddPocF(d);});
+}
+function dCloseForm(){
+  document.getElementById('d-form-wrap').style.display='none';
+  document.getElementById('upd-btn').style.display='inline-flex';
+  document.getElementById('hist-btn').style.display='inline-flex';
+}
+
+/* -- SAVE FORM -- */
+function dSaveForm(){
+  var gv=function(id){var el=document.getElementById(id);return el?el.value:'';};
+  var gi=function(id){return parseInt(gv(id))||0;};
+  D.date=gv('df-date')||D.date;D.name=gv('df-name')||D.name;
+  D.dhd=gi('df-dhd');D.cub=gi('df-cub');D.email=gi('df-email');D.d24=gi('df-d24');
+  D.p1=gi('df-p1');D.p2=gi('df-p2');D.p3=gi('df-p3');D.p4=gi('df-p4');
+  D.b3={siebel:{c:gi('db3-sc'),u:gi('db3-su')},mw:{c:gi('db3-mc'),u:gi('db3-mu')},bi:{c:gi('db3-bc'),u:gi('db3-bu')},infra:{c:gi('db3-ic'),u:gi('db3-iu')}};
+  D.sr={siebel:{c:gi('dsr-sc'),u:gi('dsr-su')},mw:{c:gi('dsr-mc'),u:gi('dsr-mu')},bi:{c:gi('dsr-bc'),u:gi('dsr-bu')},infra:{c:gi('dsr-ic'),u:gi('dsr-iu')}};
+  D.incidents=[];
+  document.querySelectorAll('#d-inc-fields .dfb').forEach(function(b){
+    D.incidents.push({id:b.querySelector('.dfi-id').value||'INC?',title:b.querySelector('.dfi-ti').value||'Untitled',sev:b.querySelector('.dfi-sv').value,track:b.querySelector('.dfi-tr').value,status:b.querySelector('.dfi-st').value||'No update',blocked:b.querySelector('.dfi-bl').value||'None',next:b.querySelector('.dfi-nx').value||'TBD',age:0,createdOn:b.querySelector('.dfi-cr').value||''});
+  });
+  D.ritms=[];
+  document.querySelectorAll('#d-ritm-fields .dfb').forEach(function(b){
+    D.ritms.push({id:b.querySelector('.dri-id').value||'RITM?',title:b.querySelector('.dri-ti').value||'Untitled',sev:b.querySelector('.dri-sv').value,track:b.querySelector('.dri-tr').value,status:b.querySelector('.dri-st').value||'No update',blocked:b.querySelector('.dri-bl').value||'None',next:b.querySelector('.dri-nx').value||'TBD',age:0,createdOn:b.querySelector('.dri-cr').value||''});
+  });
+  D.crs=[];
+  document.querySelectorAll('#d-cr-fields .dfb').forEach(function(b){
+    D.crs.push({id:b.querySelector('.dcf-id').value||'CHG?',title:b.querySelector('.dcf-ti').value||'Untitled',status:b.querySelector('.dcf-st').value,track:b.querySelector('.dcf-tr').value,status_text:b.querySelector('.dcf-sx').value||'',next:b.querySelector('.dcf-nx').value||'TBD',createdOn:b.querySelector('.dcf-cr').value||''});
+  });
+  D.pocs=[];
+  document.querySelectorAll('#d-poc-fields .dfb').forEach(function(b){
+    D.pocs.push({role:b.querySelector('.dpf-ro').value||'',name:b.querySelector('.dpf-nm').value||'',present:b.querySelector('.dpf-pr').value||'Yes'});
+  });
+  dAddSnapshot(D);
+  lsS(DK,D);
+  dArchiveResolved(D.incidents,D.ritms,D.crs,D.date);
+  dRenderResolved();
+  dCloseForm();
+  dRender(D);
+  dShowToast('&#10003; Saving to Confluence for all team members...');
+  // Save all 3 stores to Confluence in background
+  var h=dLoadHist();var res=dLoadResolved();
+  Promise.all([
+    confWrite(CONF_DATA_TITLE,'main',D),
+    confWrite(CONF_HIST_TITLE,'hist',h),
+    confWrite(CONF_RESOLVED_TITLE,'res',res)
+  ]).then(function(results){
+    var ok=results.every(function(r){return r;});
+    dShowToast(ok?'&#10003; Dashboard updated! All team members will see this on refresh.':'&#9888; Saved locally. Confluence sync failed - check connection.');
+  }).catch(function(){
+    dShowToast('&#9888; Saved locally. Confluence sync failed.');
+  });
+}
+
+/* -- RESOLVED -- */
+function dArchiveResolved(incidents,ritms,crs,date){
+  var existing=dLoadResolved();var added=0;
+  function proc(item,type){
+    if(item.sev!=='resolved'&&!(type==='CR'&&item.status==='completed'))return;
+    var dup=existing.some(function(x){return x.id===item.id&&x.resolvedDate===date;});
+    if(!dup){existing.unshift({id:item.id,type:type,title:item.title,track:item.track,status:item.status||item.status_text,resolvedDate:date,createdOn:item.createdOn||'',age:0});added++;}
+  }
+  (incidents||[]).forEach(function(i){proc(i,'INC');});
+  (ritms||[]).forEach(function(i){proc(i,'RITM');});
+  (crs||[]).forEach(function(c){if(c.status==='completed')proc({id:c.id,sev:'resolved',title:c.title,track:c.track,status:c.status_text,createdOn:c.createdOn,age:0},'CR');});
+  if(added>0)dSaveResolved(existing);
+}
+function dRenderResolved(){
+  var list=dLoadResolved();
+  var el=document.getElementById('d-resolved-list');var meta=document.getElementById('d-resolved-meta');
+  if(!el)return;
+  if(meta)meta.textContent=list.length+' resolved ticket'+(list.length!==1?'s':'')+' on record';
+  if(!list.length){el.innerHTML='<div class="dno-cards">No resolved tickets yet.</div>';return;}
+  var groups={},order=[];
+  list.forEach(function(x){if(!groups[x.resolvedDate]){groups[x.resolvedDate]=[];order.push(x.resolvedDate);}groups[x.resolvedDate].push(x);});
+  var html='';
+  order.forEach(function(date){
+    var items=groups[date];
+    html+='<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#16a34a;margin-bottom:6px;padding-bottom:4px;border-bottom:1.5px solid #bbf7d0">&#10003; Resolved on '+date+' <span style="background:#dcfce7;color:#166534;font-size:11px;padding:1px 8px;border-radius:20px;font-weight:600">'+items.length+'</span></div>';
+    items.forEach(function(x){
+      var idCol=x.type==='RITM'?'#7c3aed':'#1d4ed8';var idBg=x.type==='RITM'?'#ede9fe':'#eff6ff';
+      var tbl=x.type==='RITM'?'sc_req_item.do':'incident.do';
+      var url=SNOW+'/nav_to.do?uri='+tbl+'?sysparm_query=number='+x.id;
+      html+='<div style="background:#fff;border:.5px solid #e0dfd6;border-left:3px solid #16a34a;border-radius:0 10px 10px 0;padding:12px 16px;margin-bottom:6px">'+
+        '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">'+
+          '<a href="'+url+'" target="_blank" style="font-family:monospace;font-size:12px;font-weight:600;color:'+idCol+';background:'+idBg+';padding:2px 7px;border-radius:4px;text-decoration:none">'+x.id+' &#8599;</a>'+
+          '<div style="display:flex;gap:5px"><span style="font-size:11px;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:20px;font-weight:600">Resolved</span><span style="font-size:11px;background:#f1efea;color:#5f5e5a;border:.5px solid #d3d1c7;padding:2px 8px;border-radius:20px">'+x.track+'</span></div>'+
+        '</div>'+
+        '<p style="font-size:13px;font-weight:600;color:#1a1a18;margin:0 0 3px">'+x.title+'</p>'+
+        '<p style="font-size:12px;color:#5f5e5a;line-height:1.5">'+x.status+'</p></div>';
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+function dDownloadResolvedMD(){
+  var list=dLoadResolved();
+  if(!list.length){alert('No resolved tickets to export yet.');return;}
+  var md='# Resolved Tickets\n\nTotal: '+list.length+'\n\n---\n\n';
+  var groups={},order=[];
+  list.forEach(function(x){if(!groups[x.resolvedDate]){groups[x.resolvedDate]=[];order.push(x.resolvedDate);}groups[x.resolvedDate].push(x);});
+  order.forEach(function(date){
+    var items=groups[date];
+    md+='## '+date+' ('+items.length+')\n\n| Ticket | Type | Track | Title |\n|--------|------|-------|-------|\n';
+    items.forEach(function(x){md+='| '+x.id+' | '+x.type+' | '+x.track+' | '+x.title.replace(/\|/g,'\\|')+' |\n';});
+    md+='\n';
+  });
+  var blob=new Blob([md],{type:'text/markdown'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='resolved-tickets.md';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+}
+
+/* -- EXPOSE TO WINDOW (required for onclick in Confluence) -- */
+window.dOpenHist=dOpenHist; window.dCloseHist=dCloseHist; window.dCloseSnap=dCloseSnap;
+window.dToggleGroup=dToggleGroup; window.dViewSnap=dViewSnap;
+window.dDoDownload=dDoDownload; window.dDoCopy=dDoCopy;
+window.dOpenForm=dOpenForm; window.dCloseForm=dCloseForm; window.dSaveForm=dSaveForm;
+window.dAddIncF=dAddIncF; window.dAddRitmF=dAddRitmF; window.dAddCRF=dAddCRF; window.dAddPocF=dAddPocF;
+window.dToggleTH=dToggleTH; window.dDownloadResolvedMD=dDownloadResolvedMD;
+window.dBuildArchiveHTML   =dBuildArchiveHTML;
+
+/* -- INIT -- */
+// Step 1: Render immediately from localStorage so UI is instant
+dRender(D);
+dRenderResolved();
+dAttachSecs();
+
+// Step 2: Sync from Confluence in background
+dShowSync(true);
+Promise.all([
+  confRead(CONF_DATA_TITLE,'main'),
+  confRead(CONF_HIST_TITLE,'hist'),
+  confRead(CONF_RESOLVED_TITLE,'res')
+]).then(function(results){
+  var confD=results[0],confH=results[1],confR=results[2];
+  var updated=false;
+  if(confD){D=confD;lsS(DK,D);dRender(D);updated=true;}
+  if(confH&&Array.isArray(confH)){lsS(HK,confH);}
+  if(confR&&Array.isArray(confR)){lsS(RK,confR);dRenderResolved();}
+  dShowSync(false);
+}).catch(function(e){
+  console.error('Confluence sync error:',e);
+  dShowSync(false);
+});
+
+})();
+</script>
